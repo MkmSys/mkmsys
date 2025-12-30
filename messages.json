@@ -1,0 +1,94 @@
+[
+  {
+    "id": "1767098954929",
+    "from": "capydoo2",
+    "to": "capydoo",
+    "message": "привет",
+    "timestamp": "2025-12-30T12:49:14.929Z"
+  },
+  {
+    "id": "1767098995814",
+    "from": "capydoo",
+    "to": "capydoo2",
+    "message": "приветттт",
+    "timestamp": "2025-12-30T12:49:55.814Z"
+  },
+  {
+    "id": "1767101208920",
+    "from": "capydoo2",
+    "to": null,
+    "groupId": "SZ7JVD",
+    "message": "Привет",
+    "timestamp": "2025-12-30T13:26:48.920Z"
+  },
+  {
+    "id": "1767102012446",
+    "from": "capydoo",
+    "to": "capydoo2",
+    "groupId": null,
+    "message": "дарова",
+    "timestamp": "2025-12-30T13:40:12.446Z"
+  },
+  {
+    "id": "1767102013548",
+    "from": "capydoo",
+    "to": "capydoo2",
+    "groupId": null,
+    "message": "как",
+    "timestamp": "2025-12-30T13:40:13.548Z"
+  },
+  {
+    "id": "1767102014750",
+    "from": "capydoo",
+    "to": "capydoo2",
+    "groupId": null,
+    "message": "дела",
+    "timestamp": "2025-12-30T13:40:14.750Z"
+  },
+  {
+    "id": "1767102016188",
+    "from": "capydoo",
+    "to": "capydoo2",
+    "groupId": null,
+    "message": "у т",
+    "timestamp": "2025-12-30T13:40:16.188Z"
+  },
+  {
+    "id": "1767102017329",
+    "from": "capydoo",
+    "to": "capydoo2",
+    "groupId": null,
+    "message": "тебя",
+    "timestamp": "2025-12-30T13:40:17.329Z"
+  },
+  {
+    "id": "1767102454811",
+    "from": "capydoo",
+    "to": "capydoo2",
+    "groupId": null,
+    "message": null,
+    "fileUrl": "/uploads/1767102454770-722090160-video-1767102454679.webm",
+    "fileType": "video/webm",
+    "fileName": "video-1767102454679.webm",
+    "isVideoMessage": true,
+    "isVoiceMessage": false,
+    "duration": 3,
+    "pinned": false,
+    "timestamp": "2025-12-30T13:47:34.812Z"
+  },
+  {
+    "id": "1767102470846",
+    "from": "capydoo",
+    "to": "capydoo2",
+    "groupId": null,
+    "message": null,
+    "fileUrl": "/uploads/1767102470840-75497098-voice-1767102470824.webm",
+    "fileType": "audio/webm",
+    "fileName": "voice-1767102470824.webm",
+    "isVideoMessage": false,
+    "isVoiceMessage": true,
+    "duration": 6,
+    "pinned": false,
+    "timestamp": "2025-12-30T13:47:50.846Z"
+  }
+]

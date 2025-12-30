@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Messenger</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="messenger-container">
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h2>Fave</h2>
+                <div class="user-info">
+                    <span id="currentUsername"></span>
+                    <div class="header-actions">
+                        <button id="themeToggle" class="btn-theme" title="Toggle theme">🌓</button>
+                        <button id="logoutBtn" class="btn-logout">Logout</button>
+                    </div>
+                </div>
+            </div>
+            <div class="tabs">
+                <button class="tab-btn active" data-tab="users">Users</button>
+                <button class="tab-btn" data-tab="groups">Groups</button>
+            </div>
+            <div class="search-section">
+                <input type="text" id="userSearch" placeholder="Search users..." autocomplete="off">
+                <div id="searchResults" class="search-results"></div>
+            </div>
+            <div class="groups-section" id="groupsSection" style="display: none;">
+                <button id="createGroupBtn" class="btn-create-group">+ Create Group</button>
+            </div>
+            <div class="search-section" id="groupSearchSection" style="display: none;">
+                <input type="text" id="groupSearch" placeholder="Search groups or enter ID..." autocomplete="off">
+                <div id="groupSearchResults" class="search-results"></div>
+            </div>
+            <div class="contacts-list" id="contactsList">
+                <p class="no-contacts">Search for users to start chatting</p>
+            </div>
+        </div>
+        <div class="chat-area">
+            <div class="chat-header" id="chatHeader">
+                <div class="chat-header-content">
+                    <p class="no-chat-selected">Select a user to start chatting</p>
+                    <button id="pinnedMessagesBtn" class="btn-pinned" title="Pinned messages" style="display: none;">📌</button>
+                </div>
+                <div class="chat-header-actions" id="chatHeaderActions" style="display: none;">
+                    <button id="voiceCallBtn" class="btn-call" title="Voice Call">📞</button>
+                    <button id="videoCallBtn" class="btn-call" title="Video Call">📹</button>
+                </div>
+            </div>
+            <div class="messages-container" id="messagesContainer">
+                <div class="no-messages">
+                    <p>No conversation selected</p>
+                </div>
+            </div>
+            <div class="message-input-container" id="messageInputContainer" style="display: none;">
+                <div class="input-actions">
+                    <input type="file" id="fileInput" style="display: none;" multiple>
+                    <button id="attachBtn" class="btn-attach" title="Attach file">📎</button>
+                    <button id="videoMessageBtn" class="btn-attach" title="Video message">🎥</button>
+                    <button id="voiceMessageBtn" class="btn-attach" title="Voice message">🎤</button>
+                </div>
+                <input type="text" id="messageInput" placeholder="Type a message..." autocomplete="off">
+                <button id="sendBtn" class="btn-send">Send</button>
+            </div>
+            
+            <!-- Voice/Video Recording UI -->
+            <div id="recordingUI" class="recording-ui" style="display: none;">
+                <div class="recording-controls">
+                    <div id="recordingTimer" class="recording-timer">00:00</div>
+                    <button id="stopRecordingBtn" class="btn-stop-recording">Stop</button>
+                    <button id="cancelRecordingBtn" class="btn-cancel-recording">Cancel</button>
+                </div>
+                <div id="recordingPreview" class="recording-preview"></div>
+            </div>
+            
+            <!-- Pinned Messages Section -->
+            <div id="pinnedMessagesSection" class="pinned-messages-section" style="display: none;">
+                <div class="pinned-header">
+                    <span>📌 Pinned Messages</span>
+                    <button id="closePinnedBtn" class="btn-close-pinned">×</button>
+                </div>
+                <div id="pinnedMessagesList" class="pinned-messages-list"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Call Modal -->
+    <div id="callModal" class="call-modal" style="display: none;">
+        <div class="call-content">
+            <div class="call-video-container" id="callVideoContainer">
+                <div id="remoteVideosContainer" class="remote-videos-container">
+                    <!-- Remote videos will be added here dynamically -->
+                </div>
+                <video id="localVideo" autoplay playsinline muted></video>
+            </div>
+            <div class="call-info">
+                <p id="callStatus">Calling...</p>
+                <p id="callUser"></p>
+            </div>
+            <div class="call-controls">
+                <button id="endCallBtn" class="btn-call-end">End Call</button>
+                <button id="toggleMuteBtn" class="btn-call-control">🔇</button>
+                <button id="toggleVideoBtn" class="btn-call-control">📹</button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="js/messenger.js"></script>
+</body>
+</html>
+
