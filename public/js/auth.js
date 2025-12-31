@@ -30,7 +30,7 @@ if (isRegisterPage) {
         }
 
         try {
-            const response = await fetch('/api/register', {
+            const response = await fetch('https://fave.up.railway.app/api/register', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -68,7 +68,7 @@ if (isRegisterPage) {
         errorMessage.classList.remove('show');
 
         try {
-            const response = await fetch('/api/login', {
+            const response = await fetch('https://fave.up.railway.app/api/login', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'

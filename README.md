@@ -10,6 +10,31 @@ A beautiful, fully-functional messenger application that runs on a local server 
 - ✅ Real-time Messaging
 - ✅ Modern, Responsive UI
 - ✅ Message History
+- ✅ **Android Mobile App** (see below)
+
+## 📱 Android Mobile App
+
+This project now includes a complete Android Studio project that wraps the web app in a native Android application!
+
+### Quick Start (macOS)
+```bash
+cd android-studio-project
+./setup-macos.sh  # Installs Java automatically
+```
+
+### Manual Setup
+1. Install Java JDK 8+ and Android Studio
+2. Open `android-studio-project` folder in Android Studio
+3. Build APK: `./build-apk.sh` or use Android Studio
+
+### Features
+- Native Android app with WebView
+- Mobile-optimized interface
+- Camera/microphone permissions for calls
+- File upload support
+- Offline-capable basic functionality
+
+See `android-studio-project/README.md` for detailed setup instructions.
 
 ## Setup Instructions
 

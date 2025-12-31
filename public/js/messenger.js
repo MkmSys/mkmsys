@@ -1,17 +1,69 @@
-// Check if user is logged in
-const username = sessionStorage.getItem('username');
-if (!username) {
-    window.location.href = 'index.html';
+// Mobile detection and server configuration
+const isMobileApp = document.body.classList.contains('mobile-app') || window.AndroidWebView;
+let SERVER_URL = 'https://fave.up.railway.app';
+
+// If running in Android app, use the configured server URL
+if (window.Android) {
+    try {
+        const config = JSON.parse(window.Android.getUserData());
+        if (config.server_url) {
+            SERVER_URL = config.server_url;
+        }
+    } catch (e) {
+        console.log('Using default server URL');
+    }
 }
 
-// Initialize Socket.io
-const socket = io();
+// Check if user is logged in (different handling for mobile vs web)
+let username = null;
+let authToken = null;
+
+if (isMobileApp && window.Android) {
+    // Mobile app authentication
+    authToken = window.Android.getAuthToken();
+    if (!authToken) {
+        // Redirect to login in mobile app
+        if (window.Android.openLogin) {
+            window.Android.openLogin();
+        }
+        window.location.href = 'index.html';
+    } else {
+        try {
+            const userData = JSON.parse(window.Android.getUserData());
+            username = userData.username;
+        } catch (e) {
+            console.error('Failed to parse user data');
+        }
+    }
+} else {
+    // Web app authentication
+    username = sessionStorage.getItem('username');
+    if (!username) {
+        window.location.href = 'index.html';
+    }
+}
+
+// Initialize Socket.io with authentication
+let socket;
+if (authToken) {
+    socket = io(SERVER_URL, {
+        auth: {
+            token: authToken
+        }
+    });
+} else {
+    socket = io(SERVER_URL);
+}
 
 // Set current username
-document.getElementById('currentUsername').textContent = username;
+if (username) {
+    document.getElementById('currentUsername').textContent = username;
+}
 
 // Connect to socket with username
-socket.emit('login', username);
+if (username) {
+    socket.emit('login', username);
+}
 
 // State
 let currentChatUser = null;
@@ -29,6 +81,13 @@ let isGroupCall = false;
 let callType = null; // 'audio' or 'video'
 let callWith = null;
 let currentGroupCallId = null;
+
+// New state variables
+let currentUserProfile = null;
+let selectedMessageId = null;
+let selectedUserForContext = null;
+let contextMenuX = 0;
+let contextMenuY = 0;
 
 // Request notification permission
 if ('Notification' in window && Notification.permission === 'default') {
@@ -81,6 +140,31 @@ const pinnedMessagesSection = document.getElementById('pinnedMessagesSection');
 const pinnedMessagesList = document.getElementById('pinnedMessagesList');
 const closePinnedBtn = document.getElementById('closePinnedBtn');
 
+// New DOM Elements for new features
+const profileBtn = document.getElementById('profileBtn');
+const currentUserAvatar = document.getElementById('currentUserAvatar');
+const profileModal = document.getElementById('profileModal');
+const closeProfileBtn = document.getElementById('closeProfileBtn');
+const profileAvatar = document.getElementById('profileAvatar');
+const avatarInput = document.getElementById('avatarInput');
+const changeAvatarBtn = document.getElementById('changeAvatarBtn');
+const displayNameInput = document.getElementById('displayNameInput');
+const bioInput = document.getElementById('bioInput');
+const blockedUsersList = document.getElementById('blockedUsersList');
+const deleteAccountBtn = document.getElementById('deleteAccountBtn');
+const saveProfileBtn = document.getElementById('saveProfileBtn');
+const cancelProfileBtn = document.getElementById('cancelProfileBtn');
+const messageContextMenu = document.getElementById('messageContextMenu');
+const userContextMenu = document.getElementById('userContextMenu');
+const deleteMessageBtn = document.getElementById('deleteMessageBtn');
+const pinMessageBtn = document.getElementById('pinMessageBtn');
+const blockUserBtn = document.getElementById('blockUserBtn');
+const viewProfileBtn = document.getElementById('viewProfileBtn');
+const deleteAccountModal = document.getElementById('deleteAccountModal');
+const deletePasswordInput = document.getElementById('deletePasswordInput');
+const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+const cancelDeleteBtn = document.getElementById('cancelDeleteBtn');
+
 // Recording state
 let mediaRecorder = null;
 let recordedChunks = [];
@@ -122,9 +206,55 @@ tabBtns.forEach(btn => {
 
 // Logout functionality
 logoutBtn.addEventListener('click', () => {
-    sessionStorage.removeItem('username');
-    window.location.href = 'index.html';
+    if (isMobileApp && window.Android) {
+        // Mobile app logout
+        window.Android.logout();
+    } else {
+        // Web app logout
+        sessionStorage.removeItem('username');
+        window.location.href = 'index.html';
+    }
 });
+
+// Mobile-specific features
+if (isMobileApp) {
+    // Add profile button for mobile
+    const profileBtn = document.createElement('button');
+    profileBtn.innerHTML = '👤 Profile';
+    profileBtn.className = 'mobile-profile-btn';
+    profileBtn.onclick = () => {
+        if (window.Android && window.Android.openProfile) {
+            window.Android.openProfile();
+        }
+    };
+
+    // Add to header or sidebar
+    const sidebarHeader = document.querySelector('.sidebar-header');
+    if (sidebarHeader) {
+        sidebarHeader.appendChild(profileBtn);
+    }
+
+    // Mobile-specific styling
+    const style = document.createElement('style');
+    style.textContent = `
+        .mobile-profile-btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            margin-left: 10px;
+            font-size: 12px;
+        }
+        .mobile-app .sidebar {
+            width: 100vw;
+        }
+        .mobile-app .chat-area {
+            width: 100vw;
+        }
+    `;
+    document.head.appendChild(style);
+}
 
 // User search functionality
 userSearch.addEventListener('input', (e) => {
@@ -139,17 +269,19 @@ userSearch.addEventListener('input', (e) => {
 
     searchTimeout = setTimeout(async () => {
         try {
-            const response = await fetch(`/api/users/search?q=${encodeURIComponent(query)}`);
+            const response = await fetch(`${SERVER_URL}/api/users/search?q=${encodeURIComponent(query)}&from=${encodeURIComponent(username)}`);
             const users = await response.json();
             
-            // Filter out current user
-            const filteredUsers = users.filter(u => u.username !== username);
-            
-            if (filteredUsers.length === 0) {
+            if (users.length === 0) {
                 searchResults.innerHTML = '<div class="search-result-item">No users found</div>';
             } else {
-                searchResults.innerHTML = filteredUsers.map(user => 
-                    `<div class="search-result-item" data-username="${user.username}">${user.username}</div>`
+                searchResults.innerHTML = users.map(user => 
+                    `<div class="search-result-item" data-username="${user.username}">
+                        ${user.avatar ? `<img src="${user.avatar}" class="contact-avatar" alt="Avatar">` : ''}
+                        <div class="contact-info">
+                            <div class="contact-name">${user.displayName || user.username}</div>
+                        </div>
+                    </div>`
                 ).join('');
                 
                 // Add click handlers
@@ -161,6 +293,13 @@ userSearch.addEventListener('input', (e) => {
                             userSearch.value = '';
                             searchResults.classList.remove('show');
                         }
+                    });
+                    
+                    // Add context menu for right-click
+                    item.addEventListener('contextmenu', (e) => {
+                        e.preventDefault();
+                        selectedUserForContext = item.getAttribute('data-username');
+                        showUserContextMenu(e.clientX, e.clientY);
                     });
                 });
             }
@@ -185,7 +324,7 @@ groupSearch.addEventListener('input', (e) => {
 
     groupSearchTimeout = setTimeout(async () => {
         try {
-            const response = await fetch(`/api/groups/search?q=${encodeURIComponent(query)}`);
+            const response = await fetch(`${SERVER_URL}/api/groups/search?q=${encodeURIComponent(query)}`);
             const groups = await response.json();
             
             if (groups.length === 0) {
@@ -204,7 +343,7 @@ groupSearch.addEventListener('input', (e) => {
                         const groupName = item.getAttribute('data-group-name');
                         if (groupId) {
                             try {
-                                await fetch('/api/groups/join', {
+                                await fetch(`${SERVER_URL}/api/groups/join`, {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ groupId, username })
@@ -234,7 +373,7 @@ createGroupBtn.addEventListener('click', async () => {
     if (!groupName) return;
     
     try {
-        const response = await fetch('/api/groups', {
+        const response = await fetch(`${SERVER_URL}/api/groups`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name: groupName, createdBy: username })
@@ -253,7 +392,7 @@ createGroupBtn.addEventListener('click', async () => {
 // Load user's groups
 async function loadUserGroups() {
     try {
-        const response = await fetch(`/api/groups/user/${encodeURIComponent(username)}`);
+        const response = await fetch(`${SERVER_URL}/api/groups/user/${encodeURIComponent(username)}`);
         const groups = await response.json();
         
         // Add groups to contact list (only if not already added)
@@ -327,8 +466,8 @@ async function openChat(target, type, displayName) {
     // Load chat history
     try {
         const url = type === 'group' 
-            ? `/api/messages?groupId=${encodeURIComponent(currentGroupId)}`
-            : `/api/messages?from=${encodeURIComponent(username)}&to=${encodeURIComponent(target)}`;
+            ? `${SERVER_URL}/api/messages?groupId=${encodeURIComponent(currentGroupId)}`
+            : `${SERVER_URL}/api/messages?from=${encodeURIComponent(username)}&to=${encodeURIComponent(target)}`;
         const response = await fetch(url);
         const messages = await response.json();
         
@@ -370,7 +509,31 @@ function addContactToList(contactUsername) {
     const contactItem = document.createElement('div');
     contactItem.className = 'contact-item active';
     contactItem.setAttribute('data-username', contactUsername);
-    contactItem.innerHTML = `<span class="contact-name">${contactUsername}</span>`;
+    
+    // Get user profile for avatar and display name
+    fetch(`${SERVER_URL}/api/users/profile/${contactUsername}`)
+        .then(response => response.json())
+        .then(profile => {
+            const displayName = profile.displayName || contactUsername;
+            const avatarHtml = profile.avatar ? `<img src="${profile.avatar}" class="contact-avatar" alt="Avatar">` : '';
+            
+            contactItem.innerHTML = `
+                ${avatarHtml}
+                <div class="contact-info">
+                    <div class="contact-name">${displayName}</div>
+                    <div class="contact-last-message"></div>
+                </div>
+            `;
+        })
+        .catch(() => {
+            // Fallback if profile fetch fails
+            contactItem.innerHTML = `
+                <div class="contact-info">
+                    <div class="contact-name">${contactUsername}</div>
+                    <div class="contact-last-message"></div>
+                </div>
+            `;
+        });
     
     contactItem.addEventListener('click', () => {
         document.querySelectorAll('.contact-item').forEach(item => {
@@ -378,6 +541,13 @@ function addContactToList(contactUsername) {
         });
         contactItem.classList.add('active');
         openChat(contactUsername, 'user');
+    });
+    
+    // Add context menu for right-click
+    contactItem.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        selectedUserForContext = contactUsername;
+        showUserContextMenu(e.clientX, e.clientY);
     });
     
     // Remove "no contacts" message if exists
@@ -454,7 +624,7 @@ function updateContactTimestamp(contactId, timestamp) {
 // Load initial contacts from message history
 async function loadInitialContacts() {
     try {
-        const response = await fetch(`/api/messages?all=true&from=${encodeURIComponent(username)}`);
+        const response = await fetch(`${SERVER_URL}/api/messages?all=true&from=${encodeURIComponent(username)}`);
         const allMessages = await response.json();
         
         const userChats = new Set();
@@ -469,7 +639,7 @@ async function loadInitialContacts() {
         });
         
         // Load groups first to get group names
-        const groupsResponse = await fetch(`/api/groups/user/${encodeURIComponent(username)}`);
+        const groupsResponse = await fetch(`${SERVER_URL}/api/groups/user/${encodeURIComponent(username)}`);
         const userGroups = await groupsResponse.json();
         const groupsMap = new Map(userGroups.map(g => [g.id, g.name]));
         
@@ -530,6 +700,15 @@ function displayMessages(messages) {
         const sender = currentChatType === 'group' && !isSent ? `<strong>${escapeHtml(msg.from)}:</strong> ` : '';
         const pinnedClass = msg.pinned ? 'pinned' : '';
         
+        // Get user avatar for the message sender
+        let avatarHtml = '';
+        if (!isSent && currentChatType === 'user') {
+            // For direct messages, show the other user's avatar
+            const otherUser = currentChatUser;
+            // We would need to get the avatar from the user profile, but for now we'll use a placeholder
+            avatarHtml = `<img src="/api/placeholder-avatar/${otherUser}" class="message-avatar" alt="Avatar" onerror="this.style.display='none'">`;
+        }
+        
         let content = '';
         
         if (msg.isVideoMessage) {
@@ -565,9 +744,9 @@ function displayMessages(messages) {
             content = `<div class="message-bubble">${sender}${escapeHtml(msg.message || '')}</div>`;
         }
         
-        return `
+        const messageHtml = `
             <div class="message ${isSent ? 'sent' : 'received'} ${pinnedClass}" data-message-id="${msg.id}" style="animation-delay: ${index * 0.05}s">
-                ${content}
+                ${avatarHtml ? `<div class="message-content-with-avatar">${avatarHtml}<div class="message-text-with-avatar">${content}</div></div>` : content}
                 <div class="message-info">
                     ${time}
                     <button class="message-pin-btn" onclick="togglePinMessage('${msg.id}', ${msg.pinned || false})" title="${msg.pinned ? 'Unpin' : 'Pin'} message">
@@ -576,6 +755,8 @@ function displayMessages(messages) {
                 </div>
             </div>
         `;
+        
+        return messageHtml;
     }).join('');
     
     // Add event handlers for video messages
@@ -611,13 +792,22 @@ function displayMessages(messages) {
         });
     });
     
+    // Add context menu for messages
+    messagesContainer.querySelectorAll('.message').forEach(messageElement => {
+        messageElement.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            const messageId = messageElement.getAttribute('data-message-id');
+            showMessageContextMenu(e.clientX, e.clientY, messageId);
+        });
+    });
+    
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
 // Toggle pin message
 async function togglePinMessage(messageId, currentlyPinned) {
     try {
-        const response = await fetch('/api/messages/pin', {
+        const response = await fetch(`${SERVER_URL}/api/messages/pin`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ messageId, pinned: !currentlyPinned })
@@ -720,7 +910,11 @@ messageInput.addEventListener('keypress', (e) => {
 
 // Show notification
 function showNotification(title, body) {
-    if ('Notification' in window && Notification.permission === 'granted') {
+    if (isMobileApp && window.Android) {
+        // Mobile app notification
+        window.Android.showNotification(title, body);
+    } else if ('Notification' in window && Notification.permission === 'granted') {
+        // Web notification
         new Notification(title, { body, icon: '/favicon.ico' });
     }
 }
@@ -823,7 +1017,7 @@ async function startGroupCall(type) {
         }
         
         // Get group members
-        const response = await fetch(`/api/groups/user/${encodeURIComponent(username)}`);
+        const response = await fetch(`${SERVER_URL}/api/groups/user/${encodeURIComponent(username)}`);
         const groups = await response.json();
         const group = groups.find(g => g.id === currentGroupCallId);
         
@@ -1026,7 +1220,7 @@ socket.on('newMessage', async (messageData) => {
         if (messageData.groupId) {
             // Need to get group name
             try {
-                const response = await fetch(`/api/groups/user/${encodeURIComponent(username)}`);
+                const response = await fetch(`${SERVER_URL}/api/groups/user/${encodeURIComponent(username)}`);
                 const groups = await response.json();
                 const group = groups.find(g => g.id === messageData.groupId);
                 if (group) {
@@ -1215,7 +1409,7 @@ socket.on('groupCallOffer', async (data) => {
         
         callModal.style.display = 'flex';
         callStatus.textContent = 'In call';
-        const response = await fetch(`/api/groups/user/${encodeURIComponent(username)}`);
+        const response = await fetch(`${SERVER_URL}/api/groups/user/${encodeURIComponent(username)}`);
         const groups = await response.json();
         const group = groups.find(g => g.id === groupId);
         callUser.textContent = group ? group.name : groupId;
@@ -1250,7 +1444,7 @@ socket.on('groupCallParticipants', async (data) => {
     if (groupId !== currentGroupCallId) return;
     
     // Connect to other participants who are already in the call
-    const response = await fetch(`/api/groups/user/${encodeURIComponent(username)}`);
+    const response = await fetch(`${SERVER_URL}/api/groups/user/${encodeURIComponent(username)}`);
     const groups = await response.json();
     const group = groups.find(g => g.id === groupId);
     
@@ -1329,7 +1523,7 @@ async function uploadAndSendFile(file) {
         const formData = new FormData();
         formData.append('file', file);
         
-        const response = await fetch('/api/upload', {
+        const response = await fetch(`${SERVER_URL}/api/upload`, {
             method: 'POST',
             body: formData
         });
@@ -1478,7 +1672,7 @@ async function stopRecording() {
         formData.append('file', blob, fileName);
         
         try {
-            const response = await fetch('/api/upload', {
+            const response = await fetch(`${SERVER_URL}/api/upload`, {
                 method: 'POST',
                 body: formData
             });
@@ -1545,8 +1739,8 @@ function cancelRecording() {
 async function loadPinnedMessages() {
     try {
         const url = currentChatType === 'group' 
-            ? `/api/messages/pinned?groupId=${encodeURIComponent(currentGroupId)}`
-            : `/api/messages/pinned?from=${encodeURIComponent(username)}&to=${encodeURIComponent(currentChatUser)}`;
+            ? `${SERVER_URL}/api/messages/pinned?groupId=${encodeURIComponent(currentGroupId)}`
+            : `${SERVER_URL}/api/messages/pinned?from=${encodeURIComponent(username)}&to=${encodeURIComponent(currentChatUser)}`;
         const response = await fetch(url);
         const pinnedMessages = await response.json();
         
@@ -1655,5 +1849,328 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// Profile functionality
+profileBtn.addEventListener('click', () => {
+    loadUserProfile();
+    profileModal.style.display = 'flex';
+});
+
+closeProfileBtn.addEventListener('click', () => {
+    profileModal.style.display = 'none';
+});
+
+cancelProfileBtn.addEventListener('click', () => {
+    profileModal.style.display = 'none';
+});
+
+saveProfileBtn.addEventListener('click', async () => {
+    try {
+        const displayName = displayNameInput.value.trim();
+        const bio = bioInput.value.trim();
+        
+        const response = await fetch(`${SERVER_URL}/api/users/profile`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, displayName, bio })
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+            profileModal.style.display = 'none';
+            loadCurrentUserProfile();
+            showNotification('Profile updated successfully');
+        } else {
+            showNotification('Failed to update profile', 'error');
+        }
+    } catch (error) {
+        console.error('Error updating profile:', error);
+        showNotification('Error updating profile', 'error');
+    }
+});
+
+changeAvatarBtn.addEventListener('click', () => {
+    avatarInput.click();
+});
+
+avatarInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    const formData = new FormData();
+    formData.append('avatar', file);
+    formData.append('username', username);
+    
+    try {
+        const response = await fetch(`${SERVER_URL}/api/users/avatar`, {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+            profileAvatar.src = result.avatar;
+            loadCurrentUserProfile();
+            showNotification('Avatar updated successfully');
+        } else {
+            showNotification('Failed to update avatar', 'error');
+        }
+    } catch (error) {
+        console.error('Error updating avatar:', error);
+        showNotification('Error updating avatar', 'error');
+    }
+});
+
+deleteAccountBtn.addEventListener('click', () => {
+    deleteAccountModal.style.display = 'flex';
+});
+
+cancelDeleteBtn.addEventListener('click', () => {
+    deleteAccountModal.style.display = 'none';
+    deletePasswordInput.value = '';
+});
+
+confirmDeleteBtn.addEventListener('click', async () => {
+    const password = deletePasswordInput.value;
+    if (!password) {
+        showNotification('Please enter your password', 'error');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${SERVER_URL}/api/users/${username}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password })
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+            sessionStorage.removeItem('username');
+            window.location.href = 'index.html';
+        } else {
+            showNotification(result.error || 'Failed to delete account', 'error');
+        }
+    } catch (error) {
+        console.error('Error deleting account:', error);
+        showNotification('Error deleting account', 'error');
+    }
+});
+
+// Context menu functionality
+document.addEventListener('click', () => {
+    messageContextMenu.style.display = 'none';
+    userContextMenu.style.display = 'none';
+});
+
+deleteMessageBtn.addEventListener('click', async () => {
+    if (!selectedMessageId) return;
+    
+    try {
+        const response = await fetch(`/api/messages/${selectedMessageId}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username })
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+            // Remove message from UI
+            const messageElement = messagesContainer.querySelector(`[data-message-id="${selectedMessageId}"]`);
+            if (messageElement) {
+                messageElement.remove();
+            }
+            showNotification('Message deleted');
+        } else {
+            showNotification(result.error || 'Failed to delete message', 'error');
+        }
+    } catch (error) {
+        console.error('Error deleting message:', error);
+        showNotification('Error deleting message', 'error');
+    }
+    
+    messageContextMenu.style.display = 'none';
+});
+
+pinMessageBtn.addEventListener('click', async () => {
+    if (!selectedMessageId) return;
+    
+    try {
+        const messageElement = messagesContainer.querySelector(`[data-message-id="${selectedMessageId}"]`);
+        const isPinned = messageElement.classList.contains('pinned');
+        
+        const response = await fetch('/api/messages/pin', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ messageId: selectedMessageId, pinned: !isPinned })
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+            messageElement.classList.toggle('pinned');
+            loadPinnedMessages();
+            showNotification(isPinned ? 'Message unpinned' : 'Message pinned');
+        } else {
+            showNotification('Failed to pin/unpin message', 'error');
+        }
+    } catch (error) {
+        console.error('Error pinning message:', error);
+        showNotification('Error pinning message', 'error');
+    }
+    
+    messageContextMenu.style.display = 'none';
+});
+
+blockUserBtn.addEventListener('click', async () => {
+    if (!selectedUserForContext) return;
+    
+    try {
+        const response = await fetch('/api/users/block', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ blocker: username, blocked: selectedUserForContext })
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+            showNotification('User blocked');
+            loadUserProfile();
+            // Reload current chat if it's with the blocked user
+            if (currentChatUser === selectedUserForContext) {
+                loadMessages();
+            }
+        } else {
+            showNotification(result.error || 'Failed to block user', 'error');
+        }
+    } catch (error) {
+        console.error('Error blocking user:', error);
+        showNotification('Error blocking user', 'error');
+    }
+    
+    userContextMenu.style.display = 'none';
+});
+
+viewProfileBtn.addEventListener('click', () => {
+    // This could open a profile view modal for the selected user
+    showNotification('Profile view not implemented yet');
+    userContextMenu.style.display = 'none';
+});
+
+// Helper functions
+async function loadCurrentUserProfile() {
+    try {
+        const response = await fetch(`/api/users/profile/${username}`);
+        const profile = await response.json();
+        
+        currentUserProfile = profile;
+        
+        // Update UI
+        if (profile.avatar) {
+            currentUserAvatar.src = profile.avatar;
+            currentUserAvatar.style.display = 'block';
+        } else {
+            currentUserAvatar.style.display = 'none';
+        }
+        
+        document.getElementById('currentUsername').textContent = profile.displayName || profile.username;
+    } catch (error) {
+        console.error('Error loading user profile:', error);
+    }
+}
+
+async function loadUserProfile() {
+    try {
+        const response = await fetch(`/api/users/profile/${username}`);
+        const profile = await response.json();
+        
+        // Populate profile modal
+        if (profile.avatar) {
+            profileAvatar.src = profile.avatar;
+        } else {
+            profileAvatar.src = '';
+        }
+        
+        displayNameInput.value = profile.displayName || '';
+        bioInput.value = profile.bio || '';
+        
+        // Load blocked users
+        const blockedResponse = await fetch(`/api/users/blocked/${username}`);
+        const blockedUsers = await blockedResponse.json();
+        
+        blockedUsersList.innerHTML = blockedUsers.length === 0 
+            ? '<div>No blocked users</div>'
+            : blockedUsers.map(blockedUser => `
+                <div class="blocked-user-item">
+                    <span>${blockedUser}</span>
+                    <button class="btn-unblock" data-username="${blockedUser}">Unblock</button>
+                </div>
+            `).join('');
+        
+        // Add unblock handlers
+        blockedUsersList.querySelectorAll('.btn-unblock').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const blockedUser = btn.getAttribute('data-username');
+                try {
+                    const response = await fetch('/api/users/unblock', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ blocker: username, blocked: blockedUser })
+                    });
+                    
+                    const result = await response.json();
+                    if (result.success) {
+                        loadUserProfile();
+                        showNotification('User unblocked');
+                    } else {
+                        showNotification('Failed to unblock user', 'error');
+                    }
+                } catch (error) {
+                    console.error('Error unblocking user:', error);
+                    showNotification('Error unblocking user', 'error');
+                }
+            });
+        });
+    } catch (error) {
+        console.error('Error loading user profile:', error);
+    }
+}
+
+function showUserContextMenu(x, y) {
+    userContextMenu.style.left = x + 'px';
+    userContextMenu.style.top = y + 'px';
+    userContextMenu.style.display = 'block';
+}
+
+function showMessageContextMenu(x, y, messageId) {
+    selectedMessageId = messageId;
+    messageContextMenu.style.left = x + 'px';
+    messageContextMenu.style.top = y + 'px';
+    messageContextMenu.style.display = 'block';
+}
+
+function showNotification(message, type = 'success') {
+    // Simple notification - you could enhance this
+    const notification = document.createElement('div');
+    notification.className = `notification ${type}`;
+    notification.textContent = message;
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: ${type === 'error' ? '#dc3545' : '#28a745'};
+        color: white;
+        padding: 10px 20px;
+        border-radius: 5px;
+        z-index: 1000;
+        animation: slideIn 0.3s ease-out;
+    `;
+    
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        notification.remove();
+    }, 3000);
+}
+
 // Load initial contacts on page load
 loadInitialContacts();
+loadCurrentUserProfile();

@@ -130,7 +130,12 @@ app.post('/api/register', async (req, res) => {
     id: Date.now().toString(),
     username,
     password: hashedPassword,
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    avatar: null,
+    displayName: username,
+    bio: '',
+    blockedUsers: [],
+    isDeleted: false
   };
 
   users.push(newUser);
@@ -166,11 +171,26 @@ app.post('/api/login', async (req, res) => {
 // Search users endpoint
 app.get('/api/users/search', (req, res) => {
   const query = req.query.q || '';
+  const currentUser = req.query.from || '';
   const users = readUsers();
   
+  // Get current user's blocked users
+  const currentUserData = users.find(u => u.username === currentUser);
+  const blockedUsers = currentUserData ? (currentUserData.blockedUsers || []) : [];
+  
   const filteredUsers = users
-    .filter(u => u.username.toLowerCase().includes(query.toLowerCase()))
-    .map(u => ({ id: u.id, username: u.username }))
+    .filter(u => 
+      u.username.toLowerCase().includes(query.toLowerCase()) &&
+      u.username !== currentUser &&
+      !u.isDeleted &&
+      !blockedUsers.includes(u.username)
+    )
+    .map(u => ({ 
+      id: u.id, 
+      username: u.username,
+      displayName: u.displayName || u.username,
+      avatar: u.avatar
+    }))
     .slice(0, 20); // Limit results
 
   res.json(filteredUsers);
@@ -180,6 +200,7 @@ app.get('/api/users/search', (req, res) => {
 app.get('/api/messages', (req, res) => {
   const { from, to, groupId, all } = req.query;
   const messages = readMessages();
+  const users = readUsers();
   
   let chatMessages;
   if (all === 'true' && from) {
@@ -198,6 +219,14 @@ app.get('/api/messages', (req, res) => {
   } else {
     chatMessages = [];
   }
+
+  // Filter out deleted messages and messages from blocked users
+  const currentUser = users.find(u => u.username === from);
+  const blockedUsers = currentUser ? (currentUser.blockedUsers || []) : [];
+  
+  chatMessages = chatMessages.filter(m => 
+    !m.isDeleted && !blockedUsers.includes(m.from)
+  );
 
   res.json(chatMessages);
 });
@@ -339,6 +368,228 @@ app.get('/api/messages/pinned', (req, res) => {
   res.json(chatMessages);
 });
 
+// Delete message endpoint
+app.delete('/api/messages/:messageId', (req, res) => {
+  const { messageId } = req.params;
+  const { username } = req.body; // Username of the person deleting
+  
+  const messages = readMessages();
+  const messageIndex = messages.findIndex(m => m.id === messageId);
+  
+  if (messageIndex === -1) {
+    return res.status(404).json({ error: 'Message not found' });
+  }
+  
+  const message = messages[messageIndex];
+  
+  // Check if user can delete this message (sender or admin)
+  if (message.from !== username) {
+    return res.status(403).json({ error: 'You can only delete your own messages' });
+  }
+  
+  // Mark message as deleted instead of removing it
+  message.isDeleted = true;
+  message.deletedAt = new Date().toISOString();
+  message.deletedBy = username;
+  
+  writeMessages(messages);
+  
+  res.json({ success: true, message: 'Message deleted' });
+});
+
+// Block user endpoint
+app.post('/api/users/block', (req, res) => {
+  const { blocker, blocked } = req.body;
+  
+  if (!blocker || !blocked) {
+    return res.status(400).json({ error: 'Blocker and blocked usernames are required' });
+  }
+  
+  if (blocker === blocked) {
+    return res.status(400).json({ error: 'Cannot block yourself' });
+  }
+  
+  const users = readUsers();
+  const blockerUser = users.find(u => u.username === blocker);
+  const blockedUser = users.find(u => u.username === blocked);
+  
+  if (!blockerUser || !blockedUser) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+  
+  if (!blockerUser.blockedUsers) {
+    blockerUser.blockedUsers = [];
+  }
+  
+  if (!blockerUser.blockedUsers.includes(blocked)) {
+    blockerUser.blockedUsers.push(blocked);
+    writeUsers(users);
+  }
+  
+  res.json({ success: true, message: 'User blocked' });
+});
+
+// Unblock user endpoint
+app.post('/api/users/unblock', (req, res) => {
+  const { blocker, blocked } = req.body;
+  
+  if (!blocker || !blocked) {
+    return res.status(400).json({ error: 'Blocker and blocked usernames are required' });
+  }
+  
+  const users = readUsers();
+  const blockerUser = users.find(u => u.username === blocker);
+  
+  if (!blockerUser) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+  
+  if (blockerUser.blockedUsers) {
+    blockerUser.blockedUsers = blockerUser.blockedUsers.filter(u => u !== blocked);
+    writeUsers(users);
+  }
+  
+  res.json({ success: true, message: 'User unblocked' });
+});
+
+// Get blocked users
+app.get('/api/users/blocked/:username', (req, res) => {
+  const { username } = req.params;
+  
+  const users = readUsers();
+  const user = users.find(u => u.username === username);
+  
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+  
+  res.json(user.blockedUsers || []);
+});
+
+// Update profile endpoint
+app.put('/api/users/profile', (req, res) => {
+  const { username, displayName, bio } = req.body;
+  
+  if (!username) {
+    return res.status(400).json({ error: 'Username is required' });
+  }
+  
+  const users = readUsers();
+  const user = users.find(u => u.username === username);
+  
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+  
+  if (displayName !== undefined) {
+    user.displayName = displayName;
+  }
+  if (bio !== undefined) {
+    user.bio = bio;
+  }
+  
+  writeUsers(users);
+  
+  res.json({ success: true, user: { 
+    id: user.id,
+    username: user.username,
+    displayName: user.displayName,
+    bio: user.bio,
+    avatar: user.avatar
+  }});
+});
+
+// Upload avatar endpoint
+app.post('/api/users/avatar', upload.single('avatar'), (req, res) => {
+  const { username } = req.body;
+  
+  if (!username) {
+    return res.status(400).json({ error: 'Username is required' });
+  }
+  
+  if (!req.file) {
+    return res.status(400).json({ error: 'No avatar file uploaded' });
+  }
+  
+  const users = readUsers();
+  const user = users.find(u => u.username === username);
+  
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+  
+  user.avatar = `/uploads/${req.file.filename}`;
+  writeUsers(users);
+  
+  res.json({ success: true, avatar: user.avatar });
+});
+
+// Get user profile
+app.get('/api/users/profile/:username', (req, res) => {
+  const { username } = req.params;
+  
+  const users = readUsers();
+  const user = users.find(u => u.username === username);
+  
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+  
+  res.json({
+    id: user.id,
+    username: user.username,
+    displayName: user.displayName,
+    bio: user.bio,
+    avatar: user.avatar,
+    createdAt: user.createdAt
+  });
+});
+
+// Placeholder avatar endpoint
+app.get('/api/placeholder-avatar/:username', (req, res) => {
+  const { username } = req.params;
+  
+  const users = readUsers();
+  const user = users.find(u => u.username === username);
+  
+  if (user && user.avatar) {
+    // Redirect to actual avatar
+    res.redirect(user.avatar);
+  } else {
+    // Return a default avatar (you could generate one or use a default image)
+    res.status(404).json({ error: 'No avatar found' });
+  }
+});
+
+// Delete user account
+app.delete('/api/users/:username', async (req, res) => {
+  const { username } = req.params;
+  const { password } = req.body;
+  
+  const users = readUsers();
+  const userIndex = users.findIndex(u => u.username === username);
+  
+  if (userIndex === -1) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+  
+  const user = users[userIndex];
+  
+  // Verify password
+  const isValidPassword = await bcrypt.compare(password, user.password);
+  if (!isValidPassword) {
+    return res.status(401).json({ error: 'Invalid password' });
+  }
+  
+  // Mark user as deleted instead of removing
+  user.isDeleted = true;
+  user.deletedAt = new Date().toISOString();
+  
+  writeUsers(users);
+  
+  res.json({ success: true, message: 'Account deleted' });
+});
+
 // Socket.io connection handling
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
@@ -363,6 +614,16 @@ io.on('connection', (socket) => {
       return;
     }
 
+    // Check if sender is blocked by recipient (for direct messages)
+    if (!groupId && to) {
+      const users = readUsers();
+      const recipient = users.find(u => u.username === to);
+      if (recipient && recipient.blockedUsers && recipient.blockedUsers.includes(from)) {
+        socket.emit('messageError', { error: 'You are blocked by this user' });
+        return;
+      }
+    }
+
     const messageData = {
       id: Date.now().toString(),
       from,
@@ -376,6 +637,7 @@ io.on('connection', (socket) => {
       isVoiceMessage: isVoiceMessage || false,
       duration: duration || null,
       pinned: false,
+      isDeleted: false,
       timestamp: new Date().toISOString()
     };
 
@@ -385,20 +647,27 @@ io.on('connection', (socket) => {
     writeMessages(messages);
 
     if (groupId) {
-      // Group message - send to all group members
+      // Group message - send to all group members (except blocked users)
       const groups = readGroups();
       const group = groups.find(g => g.id === groupId);
       if (group) {
         group.members.forEach(member => {
-          const memberSocket = Array.from(io.sockets.sockets.values())
-            .find(s => s.username === member);
-          if (memberSocket && member !== from) {
-            memberSocket.emit('newMessage', messageData);
+          if (member !== from) {
+            const users = readUsers();
+            const memberUser = users.find(u => u.username === member);
+            // Don't send to users who have blocked the sender
+            if (!memberUser || !memberUser.blockedUsers || !memberUser.blockedUsers.includes(from)) {
+              const memberSocket = Array.from(io.sockets.sockets.values())
+                .find(s => s.username === member);
+              if (memberSocket) {
+                memberSocket.emit('newMessage', messageData);
+              }
+            }
           }
         });
       }
     } else {
-      // Direct message - send to recipient if online
+      // Direct message - send to recipient if online and not blocked
       const recipientSocket = Array.from(io.sockets.sockets.values())
         .find(s => s.username === to);
 

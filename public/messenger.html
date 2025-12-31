@@ -12,8 +12,12 @@
             <div class="sidebar-header">
                 <h2>Fave</h2>
                 <div class="user-info">
-                    <span id="currentUsername"></span>
+                    <div class="user-avatar-container">
+                        <img id="currentUserAvatar" class="user-avatar" src="" alt="Avatar" style="display: none;">
+                        <span id="currentUsername"></span>
+                    </div>
                     <div class="header-actions">
+                        <button id="profileBtn" class="btn-profile" title="Profile">👤</button>
                         <button id="themeToggle" class="btn-theme" title="Toggle theme">🌓</button>
                         <button id="logoutBtn" class="btn-logout">Logout</button>
                     </div>
@@ -107,8 +111,68 @@
         </div>
     </div>
     
-    <script src="/socket.io/socket.io.js"></script>
-    <script src="js/messenger.js"></script>
+    <!-- Profile Modal -->
+    <div id="profileModal" class="profile-modal" style="display: none;">
+        <div class="profile-content">
+            <div class="profile-header">
+                <span>Profile Settings</span>
+                <button id="closeProfileBtn" class="btn-close-profile">×</button>
+            </div>
+            <div class="profile-body">
+                <div class="avatar-section">
+                    <img id="profileAvatar" class="profile-avatar" src="" alt="Avatar">
+                    <input type="file" id="avatarInput" accept="image/*" style="display: none;">
+                    <button id="changeAvatarBtn" class="btn-change-avatar">Change Avatar</button>
+                </div>
+                <div class="profile-fields">
+                    <div class="field-group">
+                        <label for="displayNameInput">Display Name</label>
+                        <input type="text" id="displayNameInput" placeholder="Enter display name">
+                    </div>
+                    <div class="field-group">
+                        <label for="bioInput">Bio</label>
+                        <textarea id="bioInput" placeholder="Tell something about yourself..." rows="3"></textarea>
+                    </div>
+                </div>
+                <div class="blocked-users-section">
+                    <h3>Blocked Users</h3>
+                    <div id="blockedUsersList" class="blocked-users-list"></div>
+                </div>
+                <div class="danger-zone">
+                    <button id="deleteAccountBtn" class="btn-delete-account">Delete Account</button>
+                </div>
+            </div>
+            <div class="profile-footer">
+                <button id="saveProfileBtn" class="btn-save-profile">Save Changes</button>
+                <button id="cancelProfileBtn" class="btn-cancel-profile">Cancel</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Message Context Menu -->
+    <div id="messageContextMenu" class="context-menu" style="display: none;">
+        <div class="context-menu-item" id="deleteMessageBtn">🗑️ Delete Message</div>
+        <div class="context-menu-item" id="pinMessageBtn">📌 Pin Message</div>
+    </div>
+    
+    <!-- User Context Menu -->
+    <div id="userContextMenu" class="context-menu" style="display: none;">
+        <div class="context-menu-item" id="blockUserBtn">🚫 Block User</div>
+        <div class="context-menu-item" id="viewProfileBtn">👤 View Profile</div>
+    </div>
+    
+    <!-- Delete Account Modal -->
+    <div id="deleteAccountModal" class="delete-modal" style="display: none;">
+        <div class="delete-content">
+            <h3>Delete Account</h3>
+            <p>This action cannot be undone. All your messages and data will be permanently deleted.</p>
+            <input type="password" id="deletePasswordInput" placeholder="Enter your password to confirm">
+            <div class="delete-actions">
+                <button id="confirmDeleteBtn" class="btn-confirm-delete">Delete Account</button>
+                <button id="cancelDeleteBtn" class="btn-cancel-delete">Cancel</button>
+            </div>
+        </div>
+    </div>
 </body>
 </html>
 
